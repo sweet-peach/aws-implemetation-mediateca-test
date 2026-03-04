@@ -17,11 +17,15 @@ const LoggedPage: FC = () => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const handleClearAll = () => {
+  const clearForm = () => {
     setTitle('');
     setSubtitle('');
     setImageSrc('');
     setSelectedMediaId(null);
+  };
+
+  const handleClearAll = () => {
+    clearForm();
     setSuccessMsg(null);
     setErrorMsg(null);
   };
@@ -39,8 +43,8 @@ const LoggedPage: FC = () => {
     try {
       const mediaIds = selectedMediaId ? [selectedMediaId] : [];
       await createPost({ title, subtitle, mediaIds });
+      clearForm();
       setSuccessMsg('Post creado correctamente');
-      handleClearAll();
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Error creando el post');
     } finally {
