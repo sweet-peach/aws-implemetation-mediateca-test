@@ -78,7 +78,7 @@ Go to **AWS Console > S3 > Create bucket**.
 | Setting | Value |
 |---------|-------|
 | Bucket name | `mediateca-images-YOURID` (replace YOURID with something unique, e.g. your account ID) |
-| AWS Region | Same as DynamoDB (e.g. `eu-west-1`) |
+| AWS Region | Same as DynamoDB (e.g. `eu-south-2`) |
 | Object Ownership | ACLs disabled (recommended) |
 | Block Public Access | **Keep all checked** (block all public access) |
 | Bucket Versioning | Disabled |
@@ -130,7 +130,7 @@ Go to **AWS Console > CloudFront > Create distribution**.
 
 | Setting | Value |
 |---------|-------|
-| Origin domain | Select your S3 bucket from the dropdown (`mediateca-images-YOURID.s3.eu-west-1.amazonaws.com`) |
+| Origin domain | Select your S3 bucket from the dropdown (`mediateca-images-YOURID.s3.eu-south-2.amazonaws.com`) |
 | Origin access | **Origin access control settings (recommended)** |
 
 
@@ -167,11 +167,11 @@ Click the **JSON** tab and paste:
         "dynamodb:BatchGetItem"
       ],
       "Resource": [
-        "arn:aws:dynamodb:eu-west-1:YOUR_ACCOUNT_ID:table/MediatecaPosts",
-        "arn:aws:dynamodb:eu-west-1:YOUR_ACCOUNT_ID:table/MediatecaFolders",
-        "arn:aws:dynamodb:eu-west-1:YOUR_ACCOUNT_ID:table/MediatecaFolders/index/*",
-        "arn:aws:dynamodb:eu-west-1:YOUR_ACCOUNT_ID:table/MediatecaMedia",
-        "arn:aws:dynamodb:eu-west-1:YOUR_ACCOUNT_ID:table/MediatecaMedia/index/*"
+        "arn:aws:dynamodb:eu-south-2:YOUR_ACCOUNT_ID:table/MediatecaPosts",
+        "arn:aws:dynamodb:eu-south-2:YOUR_ACCOUNT_ID:table/MediatecaFolders",
+        "arn:aws:dynamodb:eu-south-2:YOUR_ACCOUNT_ID:table/MediatecaFolders/index/*",
+        "arn:aws:dynamodb:eu-south-2:YOUR_ACCOUNT_ID:table/MediatecaMedia",
+        "arn:aws:dynamodb:eu-south-2:YOUR_ACCOUNT_ID:table/MediatecaMedia/index/*"
       ]
     },
     {
@@ -192,13 +192,13 @@ Click the **JSON** tab and paste:
         "logs:CreateLogStream",
         "logs:PutLogEvents"
       ],
-      "Resource": "arn:aws:logs:eu-west-1:YOUR_ACCOUNT_ID:*"
+      "Resource": "arn:aws:logs:eu-south-2:YOUR_ACCOUNT_ID:*"
     }
   ]
 }
 ```
 
-> Replace `YOUR_ACCOUNT_ID` with your 12-digit AWS account ID and `mediateca-images-YOURID` with your actual bucket name. Replace `eu-west-1` if you used a different region.
+> Replace `YOUR_ACCOUNT_ID` with your 12-digit AWS account ID and `mediateca-images-YOURID` with your actual bucket name. Replace `eu-south-2` if you used a different region.
 
 | Setting | Value |
 |---------|-------|
@@ -416,7 +416,7 @@ Click **Enable CORS and replace existing CORS headers** > **Yes, replace existin
 3. Stage name: `prod`
 4. Click **Deploy**
 
-**SAVE THIS:** The **Invoke URL** shown at the top (e.g. `https://abc123xyz.execute-api.eu-west-1.amazonaws.com/prod`).
+**SAVE THIS:** The **Invoke URL** shown at the top (e.g. `https://abc123xyz.execute-api.eu-south-2.amazonaws.com/prod`).
 
 ### Final resource structure
 
@@ -472,6 +472,6 @@ Now that you have the Amplify URL, go back and update CORS:
 Edit `.env.local` in your project:
 
 ```env
-NEXT_PUBLIC_API_URL=https://YOUR_ACTUAL_API_ID.execute-api.eu-west-1.amazonaws.com/prod
+NEXT_PUBLIC_API_URL=https://YOUR_ACTUAL_API_ID.execute-api.eu-south-2.amazonaws.com/prod
 NEXT_PUBLIC_CLOUDFRONT_URL=https://YOUR_ACTUAL_DISTRIBUTION.cloudfront.net
 ```
