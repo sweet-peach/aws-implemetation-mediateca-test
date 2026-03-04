@@ -129,6 +129,7 @@ const MediatecaModal: FC<MediatecaModalProps> = ({ isOpen, onClose, onSelectMedi
     setActionLoading(true);
     try {
       for (const folderId of folderIds) {
+        let createdMediaId: string;
         if (file) {
           const presign = await getPresignedUrl(file.name, file.type);
           await uploadFileToS3(presign.uploadUrl, file);
@@ -140,6 +141,7 @@ const MediatecaModal: FC<MediatecaModalProps> = ({ isOpen, onClose, onSelectMedi
             cdnUrl: presign.cdnUrl,
             folderId,
           });
+          createdMediaId = newMedia.mediaId;
           setContents(prev => [...prev, { ...newMedia, contentSrc: presign.cdnUrl }]);
         } else {
           const newMedia = await apiCreateMedia({
@@ -148,14 +150,14 @@ const MediatecaModal: FC<MediatecaModalProps> = ({ isOpen, onClose, onSelectMedi
             contentSrc: src,
             folderId,
           });
+          createdMediaId = newMedia.mediaId;
           setContents(prev => [...prev, newMedia]);
         }
 
         setFolders(prev =>
           prev.map(f => {
             if (f.idFolder === folderId) {
-              const lastMedia = contents[contents.length - 1];
-              return { ...f, MediaArray: [...f.MediaArray, lastMedia?.mediaId || ''] };
+              return { ...f, MediaArray: [...f.MediaArray, createdMediaId] };
             }
             return f;
           })
