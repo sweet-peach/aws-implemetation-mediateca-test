@@ -161,16 +161,9 @@ async function moveMedia(event) {
     { ':fid': targetFolderId }
   );
 
+  // mediaIds is stored as a list; removals use read-modify-write (consistent with removeMedia)
   if (sourceFolderId) {
     try {
-      await updateItem(
-        FOLDERS_TABLE,
-        { folderId: sourceFolderId },
-        'DELETE mediaIds :mid',
-        { ':mid': new Set([mediaId]) }
-      );
-    } catch {
-      // SS (String Set) delete may fail if mediaIds is a list; use alternative approach
       const sourceFolder = await getItem(FOLDERS_TABLE, { folderId: sourceFolderId });
       if (sourceFolder?.mediaIds) {
         const filtered = sourceFolder.mediaIds.filter(id => id !== mediaId);
@@ -181,6 +174,8 @@ async function moveMedia(event) {
           { ':ids': filtered }
         );
       }
+    } catch (err) {
+      console.warn('Could not update source folder mediaIds on move:', err.message);
     }
   }
 
