@@ -1,8 +1,23 @@
 import type { NextConfig } from "next";
 
-const cloudfrontHostname = process.env.NEXT_PUBLIC_CLOUDFRONT_URL
-  ? new URL(process.env.NEXT_PUBLIC_CLOUDFRONT_URL).hostname
-  : undefined;
+function getCloudfrontHostname(value: string | undefined): string | undefined {
+  if (!value?.trim()) return undefined;
+  const trimmed = value.replace(/^\/+|\/+$/g, "").trim();
+  if (!trimmed) return undefined;
+  const normalized =
+    trimmed.startsWith("http://") || trimmed.startsWith("https://")
+      ? trimmed
+      : `https://${trimmed}`;
+  try {
+    return new URL(normalized).hostname;
+  } catch {
+    return undefined;
+  }
+}
+
+const cloudfrontHostname = getCloudfrontHostname(
+  process.env.NEXT_PUBLIC_CLOUDFRONT_URL
+);
 
 const nextConfig: NextConfig = {
   images: {
