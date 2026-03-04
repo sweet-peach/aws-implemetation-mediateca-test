@@ -5,10 +5,8 @@ This guide walks you through setting up all required AWS services from scratch u
 **Prerequisites:**
 - An AWS account
 - AWS Console access with admin permissions
-- Choose a region (recommended: `eu-west-1` Ireland, since users are in Spain)
-
-> Keep a notepad open to save values you'll need later (marked with **SAVE THIS**).
-
+- Choose a region (recommended: `eu-west-3` Paris or Spain `eu-south-2`, since users are in Spain)
+P.S. Why is Paris used in the Spain example? AWS Amplify for 03/04/2025 isn’t available in `eu-south-2` yet, so using `eu-west-3` for everything may keep things simpler.
 ---
 
 ## Step 1: Create DynamoDB Tables
