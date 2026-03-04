@@ -2,6 +2,7 @@
 
 import React, { FC } from 'react';
 import { MediaContent } from '../types';
+import { ensureAbsoluteMediaUrl } from '../../lib/api';
 
 interface MediaCardProps {
   media: MediaContent;
@@ -13,6 +14,11 @@ interface MediaCardProps {
   onToggleMenu: () => void;
 }
 
+function resolveDisplayUrl(media: MediaContent): string {
+  const url = media.cdnUrl || media.contentSrc || '';
+  return ensureAbsoluteMediaUrl(url);
+}
+
 const MediaCard: FC<MediaCardProps> = ({
   media,
   onSelect,
@@ -22,6 +28,8 @@ const MediaCard: FC<MediaCardProps> = ({
   isMenuOpen,
   onToggleMenu,
 }) => {
+  const displayUrl = resolveDisplayUrl(media);
+
   return (
     <div className="border rounded-lg overflow-hidden hover:shadow-lg transition-shadow relative group">
       <div
@@ -29,7 +37,7 @@ const MediaCard: FC<MediaCardProps> = ({
         onClick={() => onSelect(media)}
       >
         <img
-          src={media.contentSrc}
+          src={displayUrl}
           alt={media.contentName}
           className="w-full h-full object-cover"
           onError={(e) => {
@@ -40,6 +48,13 @@ const MediaCard: FC<MediaCardProps> = ({
       <div className="p-2">
         <p className="text-sm font-medium text-gray-700 truncate">{media.contentName}</p>
         <p className="text-xs text-gray-500">{media.mediaId}</p>
+        {media.type && (
+          <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+            media.type === 'uploaded' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+          }`}>
+            {media.type === 'uploaded' ? 'Subida' : 'Externa'}
+          </span>
+        )}
       </div>
       <div className="absolute top-2 right-2">
         <button

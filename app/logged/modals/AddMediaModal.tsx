@@ -6,7 +6,7 @@ import { Folder } from '../types';
 interface AddMediaModalProps {
   isOpen: boolean;
   folders: Folder[];
-  onConfirm: (name: string, src: string, folderIds: string[]) => void;
+  onConfirm: (name: string, src: string, folderIds: string[], file?: File | null) => void | Promise<void>;
   onCancel: () => void;
 }
 
@@ -17,13 +17,14 @@ const AddMediaModal: FC<AddMediaModalProps> = ({ isOpen, folders, onConfirm, onC
   const [useFileUpload, setUseFileUpload] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
 
   if (!isOpen) return null;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validar que sea una imagen
       if (!file.type.startsWith('image/')) {
         setFileError('El archivo debe ser una imagen');
         setSelectedFile(null);
@@ -31,31 +32,43 @@ const AddMediaModal: FC<AddMediaModalProps> = ({ isOpen, folders, onConfirm, onC
       }
       setFileError('');
       setSelectedFile(file);
-      // Crear una URL local para la imagen
-      const fileUrl = URL.createObjectURL(file);
-      setSrc(fileUrl);
     }
   };
 
-  const handleConfirm = () => {
-    if (name.trim() && src.trim() && selectedFolders.length > 0) {
-      onConfirm(name, src, selectedFolders);
-      setName('');
-      setSrc('');
-      setSelectedFolders([]);
-      setUseFileUpload(false);
-      setSelectedFile(null);
-      setFileError('');
+  const handleConfirm = async () => {
+    if (!name.trim() || selectedFolders.length === 0) return;
+
+    if (useFileUpload && !selectedFile) return;
+    if (!useFileUpload && !src.trim()) return;
+
+    setUploading(true);
+    setUploadError('');
+    try {
+      if (useFileUpload && selectedFile) {
+        await Promise.resolve(onConfirm(name, '', selectedFolders, selectedFile));
+      } else {
+        await Promise.resolve(onConfirm(name, src, selectedFolders, null));
+      }
+      resetForm();
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Error al subir');
+    } finally {
+      setUploading(false);
     }
   };
 
-  const handleCancel = () => {
+  const resetForm = () => {
     setName('');
     setSrc('');
     setSelectedFolders([]);
     setUseFileUpload(false);
     setSelectedFile(null);
     setFileError('');
+    setUploadError('');
+  };
+
+  const handleCancel = () => {
+    resetForm();
     onCancel();
   };
 
@@ -90,12 +103,11 @@ const AddMediaModal: FC<AddMediaModalProps> = ({ isOpen, folders, onConfirm, onC
             </label>
             <div className="mb-2">
               <div className="flex items-center gap-3">
-                <span 
+                <span
                   className={`text-sm cursor-pointer ${!useFileUpload ? 'text-blue-600 font-medium' : 'text-gray-500'}`}
                   onClick={() => {
                     setUseFileUpload(false);
                     setSelectedFile(null);
-                    setSrc('');
                     setFileError('');
                   }}
                 >
@@ -121,7 +133,7 @@ const AddMediaModal: FC<AddMediaModalProps> = ({ isOpen, folders, onConfirm, onC
                     }`}
                   />
                 </button>
-                <span 
+                <span
                   className={`text-sm cursor-pointer ${useFileUpload ? 'text-blue-600 font-medium' : 'text-gray-500'}`}
                   onClick={() => {
                     setUseFileUpload(true);
@@ -177,16 +189,30 @@ const AddMediaModal: FC<AddMediaModalProps> = ({ isOpen, folders, onConfirm, onC
             </div>
           </div>
         </div>
+
+        {uploadError && (
+          <p className="text-sm text-red-500 mt-3">{uploadError}</p>
+        )}
+        {uploading && (
+          <div className="mt-3">
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="bg-blue-600 h-2 rounded-full animate-pulse w-full" />
+            </div>
+            <p className="text-sm text-gray-500 mt-1">Subiendo...</p>
+          </div>
+        )}
+
         <div className="flex gap-3 justify-end mt-4">
           <button
             onClick={handleCancel}
-            className="cursor-pointer px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600"
+            disabled={uploading}
+            className="cursor-pointer px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 disabled:opacity-50"
           >
             Cancelar
           </button>
           <button
             onClick={handleConfirm}
-            disabled={selectedFolders.length === 0}
+            disabled={selectedFolders.length === 0 || uploading}
             className="cursor-pointer px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
             Añadir
