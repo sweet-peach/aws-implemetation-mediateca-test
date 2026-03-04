@@ -1,9 +1,20 @@
 'use client';
 
 import React, { FC, useState, useEffect, useCallback } from 'react';
-import mediatecaFolders from '../contents/MediatecaFolders.json';
-import mediatecaContents from '../contents/mediatecaContents.json';
 import { MediaContent, Folder } from './types';
+import {
+  fetchFolders,
+  fetchMedia,
+  createFolder as apiCreateFolder,
+  renameFolder as apiRenameFolder,
+  deleteFolder as apiDeleteFolder,
+  createMedia as apiCreateMedia,
+  updateMedia as apiUpdateMedia,
+  moveMedia as apiMoveMedia,
+  deleteMedia as apiDeleteMedia,
+  getPresignedUrl,
+  uploadFileToS3,
+} from '../lib/api';
 import FoldersSidebar from './components/FoldersSidebar';
 import MediaGrid from './components/MediaGrid';
 import SearchBar from './components/SearchBar';
@@ -22,8 +33,11 @@ interface MediatecaModalProps {
 }
 
 const MediatecaModal: FC<MediatecaModalProps> = ({ isOpen, onClose, onSelectMedia }) => {
-  const [folders, setFolders] = useState<Folder[]>(mediatecaFolders as Folder[]);
-  const [contents, setContents] = useState<MediaContent[]>(mediatecaContents as MediaContent[]);
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [contents, setContents] = useState<MediaContent[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [mediaIdFilter, setMediaIdFilter] = useState('');
   const [contentNameFilter, setContentNameFilter] = useState('');
@@ -41,6 +55,30 @@ const MediatecaModal: FC<MediatecaModalProps> = ({ isOpen, onClose, onSelectMedi
   const [editingMedia, setEditingMedia] = useState<MediaContent | null>(null);
   const [editingFolder, setEditingFolder] = useState<Folder | null>(null);
   const [mediaMenuOpen, setMediaMenuOpen] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [foldersData, mediaData] = await Promise.all([
+        fetchFolders(),
+        fetchMedia(),
+      ]);
+      setFolders(foldersData);
+      setContents(mediaData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error loading data');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadData();
+    }
+  }, [isOpen, loadData]);
 
   useEffect(() => {
     if (isOpen) {
@@ -63,123 +101,186 @@ const MediatecaModal: FC<MediatecaModalProps> = ({ isOpen, onClose, onSelectMedi
 
   const getFilteredMedia = useCallback(() => {
     const media = selectedFolderId ? getCurrentFolderMedia() : contents;
-    
+
     return media.filter(m => {
       const matchesMediaId = !mediaIdFilter || m.mediaId.toLowerCase().includes(mediaIdFilter.toLowerCase());
       const matchesContentName = !contentNameFilter || m.contentName.toLowerCase().includes(contentNameFilter.toLowerCase());
       const matchesPublicationDate = !publicationDateFilter || m.publicationTimestamp.toLowerCase().includes(publicationDateFilter.toLowerCase());
       const matchesPostId = !postIdFilter || (m.postId && m.postId.toLowerCase().includes(postIdFilter.toLowerCase()));
-      
+
       return matchesMediaId && matchesContentName && matchesPublicationDate && matchesPostId;
     });
   }, [selectedFolderId, getCurrentFolderMedia, contents, mediaIdFilter, contentNameFilter, publicationDateFilter, postIdFilter]);
 
-  const handleCreateFolder = (folderName: string) => {
-    const newFolder: Folder = {
-      idFolder: `folder-${Date.now()}`,
-      FolderName: folderName,
-      MediaArray: []
-    };
-    setFolders([...folders, newFolder]);
-    setShowCreateFolder(false);
-  };
-
-  const handleAddMedia = (name: string, src: string, folderIds: string[]) => {
-    const newMedia: MediaContent = {
-      mediaId: `media-${Date.now()}`,
-      contentName: name,
-      publicationTimestamp: new Date().toISOString(),
-      contentSrc: src,
-      postId: `post-${Date.now()}`,
-      existsIn: []
-    };
-    
-    setContents([...contents, newMedia]);
-    
-    setFolders(folders.map(folder => {
-      if (folderIds.includes(folder.idFolder)) {
-        return {
-          ...folder,
-          MediaArray: [...folder.MediaArray, newMedia.mediaId]
-        };
-      }
-      return folder;
-    }));
-    
-    setShowAddMedia(false);
-  };
-
-  const handleDeleteMedia = () => {
-    if (!itemToDelete || itemToDelete.type !== 'media') return;
-    
-    setContents(contents.filter(c => c.mediaId !== itemToDelete.id));
-    setFolders(folders.map(folder => ({
-      ...folder,
-      MediaArray: folder.MediaArray.filter(id => id !== itemToDelete.id)
-    })));
-    
-    setItemToDelete(null);
-    setShowDeleteConfirm(false);
-    setMediaMenuOpen(null);
-  };
-
-  const handleDeleteFolder = () => {
-    if (!itemToDelete || itemToDelete.type !== 'folder') return;
-    
-    setFolders(folders.filter(f => f.idFolder !== itemToDelete.id));
-    if (selectedFolderId === itemToDelete.id) {
-      setSelectedFolderId(null);
+  const handleCreateFolder = async (folderName: string) => {
+    setActionLoading(true);
+    try {
+      const newFolder = await apiCreateFolder({ folderName });
+      setFolders(prev => [...prev, newFolder]);
+      setShowCreateFolder(false);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error creating folder');
+    } finally {
+      setActionLoading(false);
     }
-    
-    setItemToDelete(null);
-    setShowDeleteFolderConfirm(false);
   };
 
-  const handleEditMedia = (name: string, src: string) => {
+  const handleAddMedia = async (name: string, src: string, folderIds: string[], file?: File | null) => {
+    setActionLoading(true);
+    try {
+      for (const folderId of folderIds) {
+        if (file) {
+          const presign = await getPresignedUrl(file.name, file.type);
+          await uploadFileToS3(presign.uploadUrl, file);
+          const newMedia = await apiCreateMedia({
+            mediaId: presign.mediaId,
+            contentName: name,
+            type: 'uploaded',
+            s3Key: presign.s3Key,
+            cdnUrl: presign.cdnUrl,
+            folderId,
+          });
+          setContents(prev => [...prev, { ...newMedia, contentSrc: presign.cdnUrl }]);
+        } else {
+          const newMedia = await apiCreateMedia({
+            contentName: name,
+            type: 'external',
+            contentSrc: src,
+            folderId,
+          });
+          setContents(prev => [...prev, newMedia]);
+        }
+
+        setFolders(prev =>
+          prev.map(f => {
+            if (f.idFolder === folderId) {
+              const lastMedia = contents[contents.length - 1];
+              return { ...f, MediaArray: [...f.MediaArray, lastMedia?.mediaId || ''] };
+            }
+            return f;
+          })
+        );
+      }
+
+      await loadData();
+      setShowAddMedia(false);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error adding media');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteMedia = async () => {
+    if (!itemToDelete || itemToDelete.type !== 'media') return;
+    setActionLoading(true);
+    try {
+      await apiDeleteMedia(itemToDelete.id);
+      setContents(prev => prev.filter(c => c.mediaId !== itemToDelete.id));
+      setFolders(prev =>
+        prev.map(folder => ({
+          ...folder,
+          MediaArray: folder.MediaArray.filter(id => id !== itemToDelete.id),
+        }))
+      );
+      setItemToDelete(null);
+      setShowDeleteConfirm(false);
+      setMediaMenuOpen(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error deleting media');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteFolder = async () => {
+    if (!itemToDelete || itemToDelete.type !== 'folder') return;
+    setActionLoading(true);
+    try {
+      await apiDeleteFolder(itemToDelete.id);
+      setFolders(prev => prev.filter(f => f.idFolder !== itemToDelete.id));
+      if (selectedFolderId === itemToDelete.id) {
+        setSelectedFolderId(null);
+      }
+      setItemToDelete(null);
+      setShowDeleteFolderConfirm(false);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error deleting folder');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleEditMedia = async (name: string, src: string) => {
     if (!editingMedia) return;
-    
-    setContents(contents.map(c => 
-      c.mediaId === editingMedia.mediaId 
-        ? { ...c, contentName: name, contentSrc: src }
-        : c
-    ));
-    
-    setEditingMedia(null);
-    setShowEditMedia(false);
-    setMediaMenuOpen(null);
+    setActionLoading(true);
+    try {
+      await apiUpdateMedia(editingMedia.mediaId, { contentName: name, contentSrc: src });
+      setContents(prev =>
+        prev.map(c =>
+          c.mediaId === editingMedia.mediaId
+            ? { ...c, contentName: name, contentSrc: src }
+            : c
+        )
+      );
+      setEditingMedia(null);
+      setShowEditMedia(false);
+      setMediaMenuOpen(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error editing media');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  const handleMoveMedia = (folderId: string) => {
+  const handleMoveMedia = async (folderId: string) => {
     if (!editingMedia) return;
-    
-    let updatedFolders = folders.map(folder => ({
-      ...folder,
-      MediaArray: folder.MediaArray.filter(id => id !== editingMedia.mediaId)
-    }));
-    
-    updatedFolders = updatedFolders.map(folder => 
-      folder.idFolder === folderId
-        ? { ...folder, MediaArray: [...folder.MediaArray, editingMedia.mediaId] }
-        : folder
-    );
-    
-    setFolders(updatedFolders);
-    setEditingMedia(null);
-    setShowMoveMedia(false);
-    setMediaMenuOpen(null);
+    setActionLoading(true);
+    try {
+      await apiMoveMedia(editingMedia.mediaId, folderId);
+
+      setFolders(prev => {
+        let updated = prev.map(folder => ({
+          ...folder,
+          MediaArray: folder.MediaArray.filter(id => id !== editingMedia.mediaId),
+        }));
+        updated = updated.map(folder =>
+          folder.idFolder === folderId
+            ? { ...folder, MediaArray: [...folder.MediaArray, editingMedia.mediaId] }
+            : folder
+        );
+        return updated;
+      });
+
+      setEditingMedia(null);
+      setShowMoveMedia(false);
+      setMediaMenuOpen(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error moving media');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  const handleEditFolder = (folderName: string) => {
+  const handleEditFolder = async (folderName: string) => {
     if (!editingFolder) return;
-    
-    setFolders(folders.map(f => 
-      f.idFolder === editingFolder.idFolder
-        ? { ...f, FolderName: folderName }
-        : f
-    ));
-    
-    setEditingFolder(null);
-    setShowEditFolder(false);
+    setActionLoading(true);
+    try {
+      await apiRenameFolder(editingFolder.idFolder, folderName);
+      setFolders(prev =>
+        prev.map(f =>
+          f.idFolder === editingFolder.idFolder
+            ? { ...f, FolderName: folderName }
+            : f
+        )
+      );
+      setEditingFolder(null);
+      setShowEditFolder(false);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error editing folder');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleConfirmClose = () => {
@@ -238,18 +339,29 @@ const MediatecaModal: FC<MediatecaModalProps> = ({ isOpen, onClose, onSelectMedi
             </button>
           </div>
 
+          {error && (
+            <div className="mx-4 mt-4 p-3 bg-red-100 border border-red-300 rounded-md text-red-700 text-sm flex justify-between items-center">
+              <span>{error}</span>
+              <button onClick={loadData} className="cursor-pointer text-red-700 underline text-sm">
+                Reintentar
+              </button>
+            </div>
+          )}
+
           {/* Toolbar */}
           <div className="p-4 border-b space-y-3">
             <div className="flex gap-2 flex-wrap">
               <button
                 onClick={() => setShowCreateFolder(true)}
-                className="cursor-pointer px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                disabled={actionLoading}
+                className="cursor-pointer px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50"
               >
                 Create Folder
               </button>
               <button
                 onClick={() => setShowAddMedia(true)}
-                className="cursor-pointer px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
+                disabled={actionLoading}
+                className="cursor-pointer px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 disabled:opacity-50"
               >
                 Añadir Media
               </button>
@@ -268,23 +380,31 @@ const MediatecaModal: FC<MediatecaModalProps> = ({ isOpen, onClose, onSelectMedi
 
           {/* Content */}
           <div className="flex-1 overflow-hidden flex">
-            <FoldersSidebar
-              folders={folders}
-              selectedFolderId={selectedFolderId}
-              onSelectFolder={setSelectedFolderId}
-              onEditFolder={handleEditFolderClick}
-            />
-            <MediaGrid
-              media={filteredMedia}
-              folders={folders}
-              selectedFolderId={selectedFolderId}
-              onSelectMedia={handleSelectMediaItem}
-              onEditMedia={handleEditMediaClick}
-              onMoveMedia={handleMoveMediaClick}
-              onDeleteMedia={handleDeleteMediaClick}
-              openMenuId={mediaMenuOpen}
-              onToggleMenu={(id) => setMediaMenuOpen(mediaMenuOpen === id ? null : id)}
-            />
+            {loading ? (
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-gray-500">Cargando...</p>
+              </div>
+            ) : (
+              <>
+                <FoldersSidebar
+                  folders={folders}
+                  selectedFolderId={selectedFolderId}
+                  onSelectFolder={setSelectedFolderId}
+                  onEditFolder={handleEditFolderClick}
+                />
+                <MediaGrid
+                  media={filteredMedia}
+                  folders={folders}
+                  selectedFolderId={selectedFolderId}
+                  onSelectMedia={handleSelectMediaItem}
+                  onEditMedia={handleEditMediaClick}
+                  onMoveMedia={handleMoveMediaClick}
+                  onDeleteMedia={handleDeleteMediaClick}
+                  openMenuId={mediaMenuOpen}
+                  onToggleMenu={(id) => setMediaMenuOpen(mediaMenuOpen === id ? null : id)}
+                />
+              </>
+            )}
           </div>
         </div>
       </div>
