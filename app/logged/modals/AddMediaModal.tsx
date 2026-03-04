@@ -6,7 +6,7 @@ import { Folder } from '../types';
 interface AddMediaModalProps {
   isOpen: boolean;
   folders: Folder[];
-  onConfirm: (name: string, src: string, folderIds: string[], file?: File | null) => void;
+  onConfirm: (name: string, src: string, folderIds: string[], file?: File | null) => void | Promise<void>;
   onCancel: () => void;
 }
 
@@ -18,6 +18,7 @@ const AddMediaModal: FC<AddMediaModalProps> = ({ isOpen, folders, onConfirm, onC
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
 
   if (!isOpen) return null;
 
@@ -41,13 +42,16 @@ const AddMediaModal: FC<AddMediaModalProps> = ({ isOpen, folders, onConfirm, onC
     if (!useFileUpload && !src.trim()) return;
 
     setUploading(true);
+    setUploadError('');
     try {
       if (useFileUpload && selectedFile) {
-        onConfirm(name, '', selectedFolders, selectedFile);
+        await Promise.resolve(onConfirm(name, '', selectedFolders, selectedFile));
       } else {
-        onConfirm(name, src, selectedFolders, null);
+        await Promise.resolve(onConfirm(name, src, selectedFolders, null));
       }
       resetForm();
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Error al subir');
     } finally {
       setUploading(false);
     }
@@ -60,6 +64,7 @@ const AddMediaModal: FC<AddMediaModalProps> = ({ isOpen, folders, onConfirm, onC
     setUseFileUpload(false);
     setSelectedFile(null);
     setFileError('');
+    setUploadError('');
   };
 
   const handleCancel = () => {
@@ -185,6 +190,9 @@ const AddMediaModal: FC<AddMediaModalProps> = ({ isOpen, folders, onConfirm, onC
           </div>
         </div>
 
+        {uploadError && (
+          <p className="text-sm text-red-500 mt-3">{uploadError}</p>
+        )}
         {uploading && (
           <div className="mt-3">
             <div className="w-full bg-gray-200 rounded-full h-2">
