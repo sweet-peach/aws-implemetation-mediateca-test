@@ -12,6 +12,15 @@ import type {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
+/** Ensures image URLs are absolute so they are not treated as relative to the app origin. */
+export function ensureAbsoluteMediaUrl(url: string): string {
+  if (!url || typeof url !== 'string') return '';
+  const trimmed = url.trim();
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+  if (trimmed.startsWith('//')) return `https:${trimmed}`;
+  return `https://${trimmed.replace(/^\/+/, '')}`;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { 'Content-Type': 'application/json' },

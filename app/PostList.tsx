@@ -2,13 +2,13 @@
 
 import React, { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { fetchPosts } from './lib/api';
+import { fetchPosts, ensureAbsoluteMediaUrl } from './lib/api';
 import type { Post } from './logged/types';
 
 function resolveImageSrc(post: Post): string {
   const media = post.media?.[0];
   if (!media) return '';
-  return media.cdnUrl || media.contentSrc || '';
+  return ensureAbsoluteMediaUrl(media.cdnUrl || media.contentSrc || '');
 }
 
 const PostList: React.FC = () => {

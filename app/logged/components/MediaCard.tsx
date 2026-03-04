@@ -2,6 +2,7 @@
 
 import React, { FC } from 'react';
 import { MediaContent } from '../types';
+import { ensureAbsoluteMediaUrl } from '../../lib/api';
 
 interface MediaCardProps {
   media: MediaContent;
@@ -14,7 +15,8 @@ interface MediaCardProps {
 }
 
 function resolveDisplayUrl(media: MediaContent): string {
-  return media.cdnUrl || media.contentSrc || '';
+  const url = media.cdnUrl || media.contentSrc || '';
+  return ensureAbsoluteMediaUrl(url);
 }
 
 const MediaCard: FC<MediaCardProps> = ({

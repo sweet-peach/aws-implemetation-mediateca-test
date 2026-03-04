@@ -4,7 +4,7 @@ import React, { FC, useState } from 'react';
 import TopNav from './TopNav';
 import MediatecaModal from './MediatecaModal';
 import { MediaContent } from './types';
-import { createPost } from '../lib/api';
+import { createPost, ensureAbsoluteMediaUrl } from '../lib/api';
 
 const LoggedPage: FC = () => {
   const [title, setTitle] = useState('');
@@ -49,7 +49,7 @@ const LoggedPage: FC = () => {
   };
 
   const handleSelectMedia = (media: MediaContent) => {
-    setImageSrc(media.cdnUrl || media.contentSrc);
+    setImageSrc(ensureAbsoluteMediaUrl(media.cdnUrl || media.contentSrc || ''));
     setSelectedMediaId(media.mediaId);
     setUseSrc(true);
   };
