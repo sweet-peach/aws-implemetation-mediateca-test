@@ -15,6 +15,14 @@ const docClient = DynamoDBDocumentClient.from(client, {
   marshallOptions: { removeUndefinedValues: true },
 });
 
+const BATCH_GET_MAX_RETRIES = 5;
+const BATCH_GET_INITIAL_DELAY_MS = 50;
+const BATCH_GET_MAX_DELAY_MS = 2000;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function getItem(tableName, key) {
   const { Item } = await docClient.send(new GetCommand({ TableName: tableName, Key: key }));
   return Item;
@@ -99,14 +107,37 @@ export async function batchGet(tableName, keys) {
 
   const items = [];
   for (const chunk of chunks) {
-    const { Responses } = await docClient.send(
-      new BatchGetCommand({
-        RequestItems: {
-          [tableName]: { Keys: chunk },
-        },
-      })
-    );
-    items.push(...(Responses?.[tableName] || []));
+    let currentKeys = chunk;
+    let retries = 0;
+
+    while (currentKeys.length > 0) {
+      const { Responses, UnprocessedKeys } = await docClient.send(
+        new BatchGetCommand({
+          RequestItems: {
+            [tableName]: { Keys: currentKeys },
+          },
+        })
+      );
+      items.push(...(Responses?.[tableName] || []));
+
+      const unprocessed = UnprocessedKeys?.[tableName]?.Keys;
+      if (!unprocessed?.length) break;
+
+      if (retries >= BATCH_GET_MAX_RETRIES) {
+        console.warn(
+          `batchGet: max retries (${BATCH_GET_MAX_RETRIES}) reached for table ${tableName}, ${unprocessed.length} keys unprocessed`
+        );
+        break;
+      }
+
+      const delayMs = Math.min(
+        BATCH_GET_MAX_DELAY_MS,
+        BATCH_GET_INITIAL_DELAY_MS * Math.pow(2, retries)
+      );
+      await sleep(delayMs);
+      currentKeys = unprocessed;
+      retries += 1;
+    }
   }
   return items;
 }
